@@ -4,7 +4,7 @@
 # PLEASE DO NOT EDIT IT DIRECTLY.
 #
 
-FROM ubuntu:jammy
+FROM ubuntu:focal
 
 # add our user and group first to make sure their IDs get assigned consistently, regardless of whatever dependencies get added
 RUN set -eux; \
@@ -87,7 +87,7 @@ RUN echo "deb [ arch=amd64 trusted=yes ] https://repo.mongodb.org/apt/ubuntu foc
 
 # http://repo.mongodb.com/apt/ubuntu/dists/focal/mongodb-enterprise/development/
 # https://docs.mongodb.org/master/release-notes/6.0/
-ENV MONGO_VERSION 6.3.1
+ENV MONGO_VERSION 6.3.2
 # 09/29/2022, https://github.com/mongodb/mongo/tree/94fb7dfc8b974f1f5343e7ea394d0d9deedba50e
 
 RUN set -x \
