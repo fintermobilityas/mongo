@@ -4,16 +4,16 @@
 # PLEASE DO NOT EDIT IT DIRECTLY.
 #
 
-FROM mcr.microsoft.com/windows/servercore:1809
+FROM mcr.microsoft.com/windows/servercore:ltsc2022
 
 SHELL ["powershell", "-Command", "$ErrorActionPreference = 'Stop';"]
 
-# https://docs.mongodb.org/master/release-notes/4.2/
-ENV MONGO_VERSION 4.2.24
-# 02/23/2023, https://github.com/mongodb/mongo/tree/5e4ec1d24431fcdd28b579a024c5c801b8cde4e2
+# https://docs.mongodb.org/master/release-notes/4.4/
+ENV MONGO_VERSION 4.4.24-rc0
+# 08/04/2023, https://github.com/mongodb/mongo/tree/0b86b9b7b42ad9970c5f818c527dd86c0634243a
 
-ENV MONGO_DOWNLOAD_URL https://fastdl.mongodb.org/win32/mongodb-win32-x86_64-2012plus-4.2.24-signed.msi
-ENV MONGO_DOWNLOAD_SHA256=b41f2e65ebf109020327977eb7133e2ca3f3606f409935cfe817e1f4dab7f2dd
+ENV MONGO_DOWNLOAD_URL https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-4.4.24-rc0-signed.msi
+ENV MONGO_DOWNLOAD_SHA256=8c7380aa8bc24273a4b38d56a136ae448bdf828ba9d902f90d3ac494a6830406
 
 RUN Write-Host ('Downloading {0} ...' -f $env:MONGO_DOWNLOAD_URL); \
 	[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; \
@@ -38,7 +38,7 @@ RUN Write-Host ('Downloading {0} ...' -f $env:MONGO_DOWNLOAD_URL); \
 			'/l*v', 'install.log', \
 # https://docs.mongodb.com/manual/tutorial/install-mongodb-on-windows-unattended/#run-the-windows-installer-from-the-windows-command-interpreter
 			'INSTALLLOCATION=C:\mongodb', \
-			'ADDLOCAL=Client,ImportExportTools,MiscellaneousTools,MonitoringTools,Router,ServerNoService' \
+			'ADDLOCAL=Client,MiscellaneousTools,Router,ServerNoService' \
 		); \
 	if (-Not (Test-Path C:\mongodb\bin\mongod.exe -PathType Leaf)) { \
 		Write-Host 'Installer failed!'; \
