@@ -76,6 +76,7 @@ RUN set -ex; \
 # Options for MONGO_PACKAGE: mongodb-org OR mongodb-enterprise
 # Options for MONGO_REPO: repo.mongodb.org OR repo.mongodb.com
 # Example: docker build --build-arg MONGO_PACKAGE=mongodb-enterprise --build-arg MONGO_REPO=repo.mongodb.com .
+ARG MONGO_VERSION=7.0.1
 ARG MONGO_PACKAGE=mongodb-enterprise
 ARG MONGO_REPO=repo.mongodb.com
 ENV MONGO_PACKAGE=${MONGO_PACKAGE} MONGO_REPO=${MONGO_REPO}
@@ -85,12 +86,7 @@ RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv B00A0BD1E2C63C1
 
 ENV MONGO_MAJOR 7.0
 RUN echo "deb [ arch=amd64 trusted=yes ] https://$MONGO_REPO/apt/ubuntu jammy/${MONGO_PACKAGE}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE}.list"
-# 7.0 is not GA, so we need the previous release for mongodb-mongosh and mongodb-database-tools
-RUN echo "deb [ arch=amd64 trusted=yes ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/6.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org.list
-
-# https://docs.mongodb.org/master/release-notes/7.0/
-ENV MONGO_VERSION 7.0.0
-# 07/27/2023, https://github.com/mongodb/mongo/tree/0d1635d51d552e1d69dfc6da25b5f0488348d62e
+RUN echo "deb [ arch=amd64 trusted=yes ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/$MONGO_MAJOR multiverse" | tee /etc/apt/sources.list.d/mongodb-org.list
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
