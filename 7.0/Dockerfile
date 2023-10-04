@@ -86,7 +86,6 @@ RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv B00A0BD1E2C63C1
 
 ENV MONGO_MAJOR 7.0
 RUN echo "deb [ arch=amd64 trusted=yes ] https://$MONGO_REPO/apt/ubuntu jammy/${MONGO_PACKAGE}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE}.list"
-RUN echo "deb [ arch=amd64 trusted=yes ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/$MONGO_MAJOR multiverse" | tee /etc/apt/sources.list.d/mongodb-org.list
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
