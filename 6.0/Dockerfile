@@ -87,19 +87,21 @@ RUN echo "deb [ arch=amd64 trusted=yes ] https://repo.mongodb.org/apt/ubuntu foc
 
 # http://repo.mongodb.com/apt/ubuntu/dists/focal/mongodb-enterprise/development/
 # https://docs.mongodb.org/master/release-notes/6.0/
-ENV MONGO_VERSION 6.3.2
-# 09/29/2022, https://github.com/mongodb/mongo/tree/94fb7dfc8b974f1f5343e7ea394d0d9deedba50e
+ENV MONGO_VERSION 6.0.10
+# 09/11/2023, https://github.com/mongodb/mongo/tree/8e4b5670df9b9fe814e57cb5f3f8ee9407237b5a
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
 	&& export DEBIAN_FRONTEND=noninteractive \
 	&& apt-get update \
 	&& apt-get install -y \
-		${MONGO_PACKAGE}-unstable=$MONGO_VERSION \
-		${MONGO_PACKAGE}-unstable-server=$MONGO_VERSION \
-		${MONGO_PACKAGE}-unstable-shell=$MONGO_VERSION \
-		${MONGO_PACKAGE}-unstable-mongos=$MONGO_VERSION \
-		${MONGO_PACKAGE}-unstable-tools=$MONGO_VERSION \
+		${MONGO_PACKAGE}=$MONGO_VERSION \
+		${MONGO_PACKAGE}-server=$MONGO_VERSION \
+		${MONGO_PACKAGE}-shell=$MONGO_VERSION \
+		${MONGO_PACKAGE}-mongos=$MONGO_VERSION \
+		${MONGO_PACKAGE}-tools=$MONGO_VERSION \
+		${MONGO_PACKAGE}-database=$MONGO_VERSION \
+		${MONGO_PACKAGE}-database-tools-extra=$MONGO_VERSION \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& rm -rf /var/lib/mongodb \
 	&& mv /etc/mongod.conf /etc/mongod.conf.orig
