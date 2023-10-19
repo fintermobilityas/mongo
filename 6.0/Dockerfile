@@ -87,8 +87,8 @@ RUN echo "deb [ arch=amd64 trusted=yes ] https://repo.mongodb.org/apt/ubuntu foc
 
 # http://repo.mongodb.com/apt/ubuntu/dists/focal/mongodb-enterprise/development/
 # https://docs.mongodb.org/master/release-notes/6.0/
-ENV MONGO_VERSION 6.0.10
-# 09/11/2023, https://github.com/mongodb/mongo/tree/8e4b5670df9b9fe814e57cb5f3f8ee9407237b5a
+ENV MONGO_VERSION 6.0.11
+# 10/05/2023, https://github.com/mongodb/mongo/tree/f797f841eaf1759c770271ae00c88b92b2766eed
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
