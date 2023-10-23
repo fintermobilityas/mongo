@@ -76,29 +76,31 @@ RUN set -ex; \
 # Options for MONGO_PACKAGE: mongodb-org OR mongodb-enterprise
 # Options for MONGO_REPO: repo.mongodb.org OR repo.mongodb.com
 # Example: docker build --build-arg MONGO_PACKAGE=mongodb-enterprise --build-arg MONGO_REPO=repo.mongodb.com .
-ARG MONGO_VERSION=7.0.2
+ARG MONGO_VERSION=7.1.0
 ARG MONGO_PACKAGE=mongodb-enterprise
 ARG MONGO_REPO=repo.mongodb.com
 ENV MONGO_PACKAGE=${MONGO_PACKAGE} MONGO_REPO=${MONGO_REPO}
 
 RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 6A26B1AE64C3C388
 RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv B00A0BD1E2C63C11
+RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 160D26BB1785BA38
 
-ENV MONGO_MAJOR 7.0
-RUN echo "deb [ arch=amd64 trusted=yes ] https://$MONGO_REPO/apt/ubuntu jammy/${MONGO_PACKAGE}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE}.list"
+ENV MONGO_MAJOR 7.1
+RUN echo "deb [ arch=amd64 trusted=yes ] https://$MONGO_REPO/apt/ubuntu jammy/${MONGO_PACKAGE}/development multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE}.list"
+RUN echo "deb [ arch=amd64 trusted=yes ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org.list
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
 	&& export DEBIAN_FRONTEND=noninteractive \
 	&& apt-get update \
 	&& apt-get install -y \
-		${MONGO_PACKAGE}=$MONGO_VERSION \
-		${MONGO_PACKAGE}-server=$MONGO_VERSION \
-		${MONGO_PACKAGE}-shell=$MONGO_VERSION \
-		${MONGO_PACKAGE}-mongos=$MONGO_VERSION \
-		${MONGO_PACKAGE}-tools=$MONGO_VERSION \
-		${MONGO_PACKAGE}-database=$MONGO_VERSION \
-		${MONGO_PACKAGE}-database-tools-extra=$MONGO_VERSION \
+		${MONGO_PACKAGE}-unstable=$MONGO_VERSION \
+		${MONGO_PACKAGE}-unstable-server=$MONGO_VERSION \
+		${MONGO_PACKAGE}-unstable-shell=$MONGO_VERSION \
+		${MONGO_PACKAGE}-unstable-mongos=$MONGO_VERSION \
+		${MONGO_PACKAGE}-unstable-tools=$MONGO_VERSION \
+		${MONGO_PACKAGE}-unstable-database=$MONGO_VERSION \
+		${MONGO_PACKAGE}-unstable-database-tools-extra=$MONGO_VERSION \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& rm -rf /var/lib/mongodb \
 	&& mv /etc/mongod.conf /etc/mongod.conf.orig
