@@ -4,7 +4,7 @@
 # PLEASE DO NOT EDIT IT DIRECTLY.
 #
 
-FROM mcr.microsoft.com/windows/nanoserver:1809
+FROM mcr.microsoft.com/windows/nanoserver:ltsc2022
 
 SHELL ["cmd", "/S", "/C"]
 
@@ -14,19 +14,19 @@ RUN setx /m PATH "C:\mongodb\bin;%PATH%"
 USER ContainerUser
 # doing this first to share cache across versions more aggressively
 
-COPY --from=mongo:7.0.12-rc1-windowsservercore-1809 \
+COPY --from=mongo:5.0.28-rc0-windowsservercore-ltsc2022 \
 	C:\\Windows\\System32\\msvcp140.dll \
 	C:\\Windows\\System32\\msvcp140_1.dll \
 	C:\\Windows\\System32\\vcruntime140.dll \
 	C:\\Windows\\System32\\vcruntime140_1.dll \
 	C:\\Windows\\System32\\
 
-# https://docs.mongodb.org/master/release-notes/7.0/
-ENV MONGO_VERSION 7.0.12-rc1
-# 06/19/2024, https://github.com/mongodb/mongo/tree/b6513ce0781db6818e24619e8a461eae90bc94fc
+# https://docs.mongodb.org/master/release-notes/5.0/
+ENV MONGO_VERSION 5.0.28-rc0
+# 06/27/2024, https://github.com/mongodb/mongo/tree/a8f8b8e1e271f236e761d0138e2418d0a114c941
 
-COPY --from=mongo:7.0.12-rc1-windowsservercore-1809 C:\\mongodb C:\\mongodb
-RUN mongod --version
+COPY --from=mongo:5.0.28-rc0-windowsservercore-ltsc2022 C:\\mongodb C:\\mongodb
+RUN mongo --version && mongod --version
 
 VOLUME C:\\data\\db C:\\data\\configdb
 
