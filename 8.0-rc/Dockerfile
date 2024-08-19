@@ -89,7 +89,7 @@ RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt
 RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu jammy/${MONGO_PACKAGE%-unstable}/7.0 multiverse" | tee "/etc/apt/sources.list.d/mongodb-previous.list"
 
 # https://docs.mongodb.org/master/release-notes/8.0/
-ENV MONGO_VERSION 8.0.0~rc15
+ENV MONGO_VERSION 8.0.0~rc18
 # 07/11/2024, https://github.com/mongodb/mongo/tree/b5271455825d4af9af540e3dd05ae19963355efb
 
 RUN set -x \
