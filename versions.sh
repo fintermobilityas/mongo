@@ -52,7 +52,7 @@ shell="$(
 				"3.6", # April 2021
 				"4.0", # April 2022
 				"4.2", # April 2023
-				null # ... so we can have a trailing comma above, making diffs nicer :trollface:
+				empty
 			] | index($v) | not)
 
 			# filter out so-called "rapid releases": https://docs.mongodb.com/upcoming/reference/versioning/
@@ -63,6 +63,11 @@ shell="$(
 				| not
 			)
 		]
+
+		# in case of duplicates that map to the same "X.Y[-rc]", prefer the first one (the upstream file is typically in descending sorted order, so we do not need to get much more complicated than this)
+		# *not* doing this was actually totally fine/sane up until 2024-08-14, because prior to that there were never any duplicates in the upstream file so everything "just worked"
+		# on 2024-08-14, upstream released 7.0.14-rc0, but (accidentally?) left 7.0.13-rc1 listed in the file, and without this fix, we prefer the later entry due to how we export the data below
+		| unique_by(.version)
 
 		# now convert all that data to a basic shell list + map so we can loop over/use it appropriately
 		| "allVersions=( " + (
@@ -112,44 +117,32 @@ for version in "${versions[@]}"; do
 	msiSha256="${msiSha256%% *}"
 	export msiUrl msiSha256
 
-	export pgpKeyVersion="${version%-rc}"
-	pgp='[]'
-	if [ "$pgpKeyVersion" != "$version" ]; then
-		# the "testing" repository (used for RCs) has a dedicated PGP key (but still needs the "release" key for the release line)
-		pgp="$(jq -c --argjson pgp "$pgp" '$pgp + [ .dev // error("missing PGP key for dev") ]' pgp-keys.json)"
-
-		# if {{ env.rcVersion }} is not GA, so we need the previous release for mongodb-mongosh and mongodb-database-tools
-		isDotZeroPrerelease="$(_jq -r '.version | ltrimstr(env.pgpKeyVersion) | startswith(".0-")')"
-		if [ "$isDotZeroPrerelease" = 'true' ]; then
-			pgp="$(
-				jq -c --argjson pgp "$pgp" '
-					(env.pgpKeyVersion | split(".") | .[0] |= (tonumber - 1 | tostring) | join(".")) as $previousVersion
-					| $pgp + [ .[$previousVersion] // error("missing PGP key for \($previousVersion)") ]
-				' pgp-keys.json
-			)"
-		fi
-	fi
-	minor="${pgpKeyVersion#*.}" # "4.3" -> "3"
-	if [ "$(( minor % 2 ))" = 1 ]; then
-		pgpKeyVersion="${version%.*}.$(( minor + 1 ))"
-	fi
-	pgp="$(jq -c --argjson pgp "$pgp" '$pgp + [ .[env.pgpKeyVersion] // error("missing PGP key for \(env.pgpKeyVersion)") ]' pgp-keys.json)"
-
 	json="$(
 		{
 			jq <<<"$json" -c .
-			_jq --argjson pgp "$pgp" '{ (env.version): (
-				with_entries(select(.key as $key | [
+			_jq --slurpfile pgpKeys pgp-keys.json '{ (env.version): (
+				$pgpKeys[0] as $pgp
+				| (env.version | rtrimstr("-rc")) as $rcVersion
+				| with_entries(select(.key as $key | [
 					# interesting bits of raw upstream metadata
 					"changes",
 					"date",
 					"githash",
 					"notes",
 					"version",
-					null # ... trailing comma hack
+					empty
 				] | index($key)))
 				+ {
-					pgp: $pgp,
+					pgp: [
+						if env.version != $rcVersion then
+							# the "testing" repository (used for RCs) has a dedicated PGP key (but still needs the "release" key for the release line)
+							$pgp.dev
+						else empty end,
+
+						$pgp[$rcVersion],
+
+						empty
+					],
 					targets: (
 						reduce (
 							.downloads[]
@@ -170,10 +163,13 @@ for version in "${versions[@]}"; do
 										"debian10": "debian:buster-slim",
 										"debian11": "debian:bullseye-slim",
 										"debian12": "debian:bookworm-slim",
+										"debian13": "debian:trixie-slim",
+										"debian14": "debian:forky-slim",
 										"ubuntu1604": "ubuntu:xenial",
 										"ubuntu1804": "ubuntu:bionic",
 										"ubuntu2004": "ubuntu:focal",
 										"ubuntu2204": "ubuntu:jammy",
+										"ubuntu2404": "ubuntu:noble",
 									}[$t] // "unknown"
 								)
 								| .[$t].suite = (
