@@ -89,8 +89,8 @@ ENV MONGO_MAJOR 8.0
 RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu noble/${MONGO_PACKAGE%-unstable}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE%-unstable}.list"
 
 # https://docs.mongodb.org/master/release-notes/8.0/
-ENV MONGO_VERSION 8.0.4
-# 11/27/2024, https://github.com/mongodb/mongo/tree/bc35ab4305d9920d9d0491c1c9ef9b72383d31f9
+ENV MONGO_VERSION 8.0.6
+# 03/17/2025, https://github.com/mongodb/mongo/tree/80f21521ad4a3dfd5613f5d649d7058c6d46277f
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
@@ -113,6 +113,10 @@ VOLUME /data/db /data/configdb
 # ensure that if running as custom user that "mongosh" has a valid "HOME"
 # https://github.com/docker-library/mongo/issues/524
 ENV HOME /data/db
+
+# ensure that glibc isn't using rseq so that google-tcmalloc can
+# https://www.mongodb.com/docs/manual/administration/tcmalloc-performance/#disable-glibc-rseq
+ENV GLIBC_TUNABLES glibc.pthread.rseq=0
 
 COPY docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
