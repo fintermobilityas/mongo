@@ -24,10 +24,10 @@ RUN set -eux; \
 	rm -rf /var/lib/apt/lists/*
 
 # grab gosu for easy step-down from root (https://github.com/tianon/gosu/releases)
-ENV GOSU_VERSION 1.18
+ENV GOSU_VERSION=1.18
 # grab "js-yaml" for parsing mongod's YAML config files (https://github.com/nodeca/js-yaml/releases)
-ENV JSYAML_VERSION 3.13.1
-ENV JSYAML_CHECKSUM 662e32319bdd378e91f67578e56a34954b0a2e33aca11d70ab9f4826af24b941
+ENV JSYAML_VERSION=3.13.1
+ENV JSYAML_CHECKSUM=662e32319bdd378e91f67578e56a34954b0a2e33aca11d70ab9f4826af24b941
 
 RUN set -eux; \
 	\
@@ -59,12 +59,16 @@ RUN set -eux; \
 	\
 # download/install MongoDB PGP keys
 	export GNUPGHOME="$(mktemp -d)"; \
-	wget -O KEYS 'https://pgp.mongodb.com/server-8.0.asc'; \
-	gpg --batch --import KEYS; \
+	wget -O mongodb-server-8.0.asc 'https://pgp.mongodb.com/server-8.0.asc'; \
+	wget -O mongodb-server-dev.asc 'https://pgp.mongodb.com/server-dev.asc'; \
+	gpg --batch --import mongodb-server-8.0.asc mongodb-server-dev.asc; \
 	mkdir -p /etc/apt/keyrings; \
-	gpg --batch --export --armor '4B0752C1BCA238C0B4EE14DC41DE058A4E7DCA05' > /etc/apt/keyrings/mongodb.asc; \
+	gpg --batch --export --armor \
+		'28DE23AF08040FB24C33F36381B0EBBBADCEA95C' \
+		'4B0752C1BCA238C0B4EE14DC41DE058A4E7DCA05' \
+		> /etc/apt/keyrings/mongodb.asc; \
 	gpgconf --kill all; \
-	rm -rf "$GNUPGHOME" KEYS; \
+	rm -rf "$GNUPGHOME" mongodb-server-8.0.asc mongodb-server-dev.asc; \
 	\
 	apt-mark auto '.*' > /dev/null; \
 	apt-mark manual $savedAptMark > /dev/null; \
@@ -85,11 +89,17 @@ ARG MONGO_PACKAGE=mongodb-enterprise
 ARG MONGO_REPO=repo.mongodb.com
 ENV MONGO_PACKAGE=${MONGO_PACKAGE} MONGO_REPO=${MONGO_REPO}
 
-ENV MONGO_MAJOR 8.0
-RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu noble/${MONGO_PACKAGE%-unstable}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE%-unstable}.list"
+ARG MONGO_MAJOR=development
+ARG MONGOSH_CHANNEL=8.2
+ENV MONGO_MAJOR=${MONGO_MAJOR} MONGOSH_CHANNEL=${MONGOSH_CHANNEL}
+RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu noble/${MONGO_PACKAGE%-unstable}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE%-unstable}.list" \
+	&& if [ -n "$MONGOSH_CHANNEL" ] && [ "$MONGOSH_CHANNEL" != "$MONGO_MAJOR" ]; then \
+		echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu noble/${MONGO_PACKAGE%-unstable}/$MONGOSH_CHANNEL multiverse" | tee /etc/apt/sources.list.d/mongodb-mongosh.list; \
+	fi
 
 # https://docs.mongodb.org/master/release-notes/8.0/
-ENV MONGO_VERSION 8.0.13
+ARG MONGO_VERSION=8.2.0~latest
+ENV MONGO_VERSION=${MONGO_VERSION}
 # 08/14/2025, https://github.com/mongodb/mongo/tree/8dc5cd2a30c4524132e2d44bb314544dc477e611
 
 RUN set -x \
@@ -112,11 +122,11 @@ VOLUME /data/db /data/configdb
 
 # ensure that if running as custom user that "mongosh" has a valid "HOME"
 # https://github.com/docker-library/mongo/issues/524
-ENV HOME /data/db
+ENV HOME=/data/db
 
 # ensure that glibc isn't using rseq so that google-tcmalloc can
 # https://www.mongodb.com/docs/manual/administration/tcmalloc-performance/#disable-glibc-rseq
-ENV GLIBC_TUNABLES glibc.pthread.rseq=0
+ENV GLIBC_TUNABLES=glibc.pthread.rseq=0
 
 COPY docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]
