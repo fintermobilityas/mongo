@@ -24,7 +24,7 @@ RUN set -eux; \
 	rm -rf /var/lib/apt/lists/*
 
 # grab gosu for easy step-down from root (https://github.com/tianon/gosu/releases)
-ENV GOSU_VERSION 1.18
+ENV GOSU_VERSION 1.19
 # grab "js-yaml" for parsing mongod's YAML config files (https://github.com/nodeca/js-yaml/releases)
 ENV JSYAML_VERSION 3.13.1
 ENV JSYAML_CHECKSUM 662e32319bdd378e91f67578e56a34954b0a2e33aca11d70ab9f4826af24b941
@@ -59,10 +59,10 @@ RUN set -eux; \
 	\
 # download/install MongoDB PGP keys
 	export GNUPGHOME="$(mktemp -d)"; \
-	wget -O KEYS 'https://pgp.mongodb.com/server-dev.asc' 'https://pgp.mongodb.com/server-8.0.asc'; \
+	wget -O KEYS 'https://pgp.mongodb.com/server-8.0.asc'; \
 	gpg --batch --import KEYS; \
 	mkdir -p /etc/apt/keyrings; \
-	gpg --batch --export --armor '28DE23AF08040FB24C33F36381B0EBBBADCEA95C' '4B0752C1BCA238C0B4EE14DC41DE058A4E7DCA05' > /etc/apt/keyrings/mongodb.asc; \
+	gpg --batch --export --armor '4B0752C1BCA238C0B4EE14DC41DE058A4E7DCA05' > /etc/apt/keyrings/mongodb.asc; \
 	gpgconf --kill all; \
 	rm -rf "$GNUPGHOME" KEYS; \
 	\
@@ -85,14 +85,12 @@ ARG MONGO_PACKAGE=mongodb-org
 ARG MONGO_REPO=repo.mongodb.org
 ENV MONGO_PACKAGE=${MONGO_PACKAGE} MONGO_REPO=${MONGO_REPO}
 
-ENV MONGO_MAJOR testing
+ENV MONGO_MAJOR 8.2
 RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu noble/${MONGO_PACKAGE%-unstable}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE%-unstable}.list"
-# add GA repo for mongodb-mongosh and mongodb-database-tools
-RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu noble/${MONGO_PACKAGE%-unstable}/8.0 multiverse" | tee "/etc/apt/sources.list.d/mongodb-8.0.list"
 
-# https://docs.mongodb.org/master/release-notes/8.0/
-ENV MONGO_VERSION 8.0.14~rc1
-# 09/08/2025, https://github.com/mongodb/mongo/tree/bbdb887c2ac94424af0ee8fcaad39203bdf98671
+# https://docs.mongodb.org/master/release-notes/8.2/
+ENV MONGO_VERSION 8.2.3
+# 12/15/2025, https://github.com/mongodb/mongo/tree/36f41c9c30a2f13f834d033ba03c3463c891fb01
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input

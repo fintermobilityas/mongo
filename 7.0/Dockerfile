@@ -24,7 +24,7 @@ RUN set -eux; \
 	rm -rf /var/lib/apt/lists/*
 
 # grab gosu for easy step-down from root (https://github.com/tianon/gosu/releases)
-ENV GOSU_VERSION 1.18
+ENV GOSU_VERSION 1.19
 # grab "js-yaml" for parsing mongod's YAML config files (https://github.com/nodeca/js-yaml/releases)
 ENV JSYAML_VERSION 3.13.1
 ENV JSYAML_CHECKSUM 662e32319bdd378e91f67578e56a34954b0a2e33aca11d70ab9f4826af24b941
@@ -89,8 +89,8 @@ ENV MONGO_MAJOR 7.0
 RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu jammy/${MONGO_PACKAGE%-unstable}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE%-unstable}.list"
 
 # https://docs.mongodb.org/master/release-notes/7.0/
-ENV MONGO_VERSION 7.0.24
-# 09/04/2025, https://github.com/mongodb/mongo/tree/332b0e6c30fdc41a0228dc55657e2e0784b0fe24
+ENV MONGO_VERSION 7.0.28
+# 12/16/2025, https://github.com/mongodb/mongo/tree/cfc346c59d2cc3dbc903507fc642e22e3097f362
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
