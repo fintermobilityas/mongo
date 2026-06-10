@@ -1,6 +1,6 @@
 param (
-    [string]$MongoVersion = "8.3.1",
-    [string]$MongoPackageVersion = "8.3.1",
+    [string]$MongoVersion = "8.3.3",
+    [string]$MongoPackageVersion = "8.3.3",
     [string]$MongoAptChannel = "8.3",
     [string]$MongoMongoshChannel = "8.3"
 )
