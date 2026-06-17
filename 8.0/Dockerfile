@@ -98,7 +98,7 @@ RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt
 	fi
 
 # https://docs.mongodb.org/master/release-notes/8.0/
-ARG MONGO_VERSION=8.3.3
+ARG MONGO_VERSION=8.3.4
 ENV MONGO_VERSION=${MONGO_VERSION}
 # 08/14/2025, https://github.com/mongodb/mongo/tree/8dc5cd2a30c4524132e2d44bb314544dc477e611
 
