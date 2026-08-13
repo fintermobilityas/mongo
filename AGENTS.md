@@ -40,24 +40,43 @@ not install from that channel until MongoDB tags the GA build.
 `8.3.0~latest`. Use the suffixed version explicitly when pulling from
 `development`.
 
+## Release discovery and package gate
+
+For an update request that does not name a version, check the tracked release
+line's official release notes first (currently [MongoDB 8.3](https://www.mongodb.com/docs/manual/release-notes/8.3/)).
+The newest patch listed there is the latest officially released target, even
+when the Enterprise apt feed has not caught up.
+
+Release discovery and package availability are separate facts: release notes
+establish what MongoDB has released, while the exact Enterprise apt package
+establishes whether this image can be built. If the target is absent from the
+GA feed and no exact development package has been explicitly approved, stop
+before creating branches, images, or file changes and report the feed lag.
+
+Always commit and push the exact Dockerfile and `publish.ps1` source before
+publishing the image. After publication, verify that the manifest provenance
+records that committed revision.
+
 ## Upgrade recipes
 
 ### Patch bump on the current release line (e.g. 8.2.7 → 8.2.8)
 
 Do it on the existing `finter-<major.minor>` branch.
 
-1. `git checkout finter-8.2 && git pull`.
+1. Fetch `origin/finter-8.2` and create a separate worktree from its exact
+   commit. Never update from a shared checkout or a cached remote-tracking ref.
 2. Edit `publish.ps1`:
    - `$MongoVersion` → `"8.2.8"` (Docker image tag).
    - `$MongoPackageVersion` → `"8.2.8"` (pinned, from `/8.2` GA channel) **or**
      `"8.2.8~latest"` if pulling from `development`.
-3. (Optional) Edit `8.2/Dockerfile` `ENV MONGO_VERSION` to match — this file
-   is documentation only, not the build target, but keeping it in sync is
-   the project convention.
-4. `pwsh ./publish.ps1` to build + push the image.
-5. Commit `publish.ps1` (and `8.2/Dockerfile` if touched) with message
-   `Update to mongodb 8.2.8`, push branch.
-6. Open a version-bump PR in `../youpark.no` (see below).
+3. Edit `8.0/Dockerfile` `ARG MONGO_VERSION` to match.
+4. Commit `publish.ps1` and `8.0/Dockerfile` as
+   `Update to mongodb 8.2.8`, then push the commit to `finter-8.2`.
+5. From that clean committed source, run `pwsh ./publish.ps1` to build and push
+   the image.
+6. Verify the image version, Enterprise package inventory, manifest digest,
+   and manifest provenance against the pushed source commit.
+7. Open a version-bump PR in `../youpark.no` (see below).
 
 ### Minor/major bump (e.g. 8.2 → 8.3)
 
@@ -73,7 +92,8 @@ New release line. Create a new branch.
      (`"8.2"` while 8.3 is pre-GA — the `/8.3` channel only has
      `mongodb-database-tools` until GA). Switch to `"8.3"` once mongosh
      lands there.
-3. Build + smoke test:
+3. Commit the image source and push the new `finter-8.3` branch.
+4. Build + smoke test from that clean committed source:
 
    ```bash
    docker build \
@@ -84,27 +104,28 @@ New release line. Create a new branch.
    docker run --rm mongo-enterprise:8.3.0 mongod --version
    ```
 
-4. `pwsh ./publish.ps1` to tag + push to `ghcr.io/fintermobilityas/mongo-enterprise:8.3.0`.
-5. Commit `publish.ps1` as `Update to mongodb 8.3.0`, push branch.
-6. Change GitHub default branch:
+5. `pwsh ./publish.ps1` to tag + push to `ghcr.io/fintermobilityas/mongo-enterprise:8.3.0`.
+6. Verify the manifest digest and provenance against the pushed source commit.
+7. Change GitHub default branch:
 
    ```bash
    gh api -X PATCH repos/fintermobilityas/mongo -f default_branch=finter-8.3
    ```
 
-7. Open a version-bump PR in `../youpark.no`.
+8. Open a version-bump PR in `../youpark.no`.
 
 ## youpark.no version-bump PR
 
-The mongo version in youpark.no lives in two places plus a helper script.
-All three should change in one PR on a branch off `develop`.
+The MongoDB version and immutable image digest in youpark.no live in shared
+properties, Compose references, and a helper script. Update them together in
+one PR on a branch off `develop`.
 
-- `Directory.Build.props` → `<MongoDBVersion>` property (source of truth;
-  `build.ps1` reads this and builds the image URL).
-- `docker-compose.yml` → the two `image: ghcr.io/.../mongo-enterprise:X.Y.Z`
-  lines.
+- `Directory.Build.props` → `<MongoDBVersion>` and `<MongoDBImageDigest>`.
+- `docker-compose.yml` → both
+  `image: ghcr.io/.../mongo-enterprise:X.Y.Z@sha256:<digest>` references.
 - `scripts/install-mongodb.sh` → bare-metal installer, supports channel
   selection (stable/development).
+- `scripts/verify-mongodb-image-pins.sh` → run it to verify the shared pins.
 
 ## Pre-flight checks
 
