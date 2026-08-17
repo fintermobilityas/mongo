@@ -133,15 +133,18 @@ When a PR is due to merge (e.g. the youpark.no version-bump PR) and the user
 explicitly authorizes the merge in the request (e.g. "monitor CI and merge when
 green"), run this loop in the PR's worktree:
 
-1. **CI gate**: `gh pr checks <n> --json name,state,conclusion`. Green = no check
-   is QUEUED/IN_PROGRESS and every COMPLETED check has conclusion SUCCESS or
-   NEUTRAL. FAILURE/ERROR → fix on the branch and restart the loop.
+1. **CI gate**: `gh pr checks <n> --json name,state,bucket`. Green = no `pending`
+   bucket and every other bucket `pass` or `skipping`; `fail`/`cancel` → fix on
+   the branch and restart the loop.
 2. **Feedback gate**: poll unresolved review threads (GraphQL
-   `reviewThreads { id isResolved }`) and `gh api repos/<owner>/<repo>/pulls/<n>/reviews`
-   for new comments. Verify each claim against the code; if valid, fix, push,
-   reply to the thread with the commit hash, then resolve the thread with the
-   `resolveReviewThread` mutation. If invalid, reply with evidence and leave it
-   open unless the user pre-approved closing.
+   `reviewThreads { id isResolved }`) plus new comments via
+   `gh api repos/<owner>/<repo>/pulls/<n>/comments` (inline) and
+   `gh api repos/<owner>/<repo>/issues/<n>/comments` (issue-level) — do not
+   rely on `.../pulls/<n>/reviews` alone, it only lists review events. Verify
+   each new comment against the code; if valid, fix, push, reply to the thread
+   with the commit hash, then resolve the thread with the `resolveReviewThread`
+   mutation. If invalid, reply with evidence and leave it open unless the user
+   pre-approved closing.
 3. **Polling**: check CI and threads together every ~30 s in one loop with an
    explicit timeout (~60 min budget). A push resets CI — re-evaluate from the
    new head commit.
