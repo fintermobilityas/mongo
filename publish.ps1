@@ -1,8 +1,8 @@
 param (
-    [string]$MongoVersion = "9.0.0",
-    [string]$MongoPackageVersion = "9.0.0~556d280e",
-    [string]$MongoAptChannel = "development",
-    [string]$MongoMongoshChannel = "8.3"
+    [string]$MongoVersion = "9.0.1",
+    [string]$MongoPackageVersion = "9.0.1",
+    [string]$MongoAptChannel = "9.0",
+    [string]$MongoMongoshChannel = "9.0"
 )
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition

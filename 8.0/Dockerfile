@@ -98,9 +98,9 @@ RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt
 	fi
 
 # https://docs.mongodb.org/master/release-notes/8.0/
-ARG MONGO_VERSION=9.0.0~556d280e
+ARG MONGO_VERSION=9.0.1
 ENV MONGO_VERSION=${MONGO_VERSION}
-# 2026-08-27, pinned to the Atlas prod build: buildInfo.gitVersion 556d280e843c1c335125d847d63495e23f499820 (not in the public mongodb/mongo repo)
+# 2026-09-13, mongodb-enterprise 9.0.1 from the 9.0 GA apt channel
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
