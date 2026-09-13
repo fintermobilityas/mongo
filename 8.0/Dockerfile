@@ -60,15 +60,17 @@ RUN set -eux; \
 # download/install MongoDB PGP keys
 	export GNUPGHOME="$(mktemp -d)"; \
 	wget -O mongodb-server-8.0.asc 'https://pgp.mongodb.com/server-8.0.asc'; \
+	wget -O mongodb-server-9.asc 'https://pgp.mongodb.com/server-9.asc'; \
 	wget -O mongodb-server-dev.asc 'https://pgp.mongodb.com/server-dev.asc'; \
-	gpg --batch --import mongodb-server-8.0.asc mongodb-server-dev.asc; \
+	gpg --batch --import mongodb-server-8.0.asc mongodb-server-9.asc mongodb-server-dev.asc; \
 	mkdir -p /etc/apt/keyrings; \
 	gpg --batch --export --armor \
 		'28DE23AF08040FB24C33F36381B0EBBBADCEA95C' \
 		'4B0752C1BCA238C0B4EE14DC41DE058A4E7DCA05' \
+		'B3B42B6C39E5CDDEC0A27E3CF366D55B602E502D' \
 		> /etc/apt/keyrings/mongodb.asc; \
 	gpgconf --kill all; \
-	rm -rf "$GNUPGHOME" mongodb-server-8.0.asc mongodb-server-dev.asc; \
+	rm -rf "$GNUPGHOME" mongodb-server-8.0.asc mongodb-server-9.asc mongodb-server-dev.asc; \
 	\
 	apt-mark auto '.*' > /dev/null; \
 	apt-mark manual $savedAptMark > /dev/null; \
