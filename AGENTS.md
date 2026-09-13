@@ -40,6 +40,23 @@ not install from that channel until MongoDB tags the GA build.
 `8.3.0~latest`. Use the suffixed version explicitly when pulling from
 `development`.
 
+## Release signing keys (the other channel trap)
+
+Every GA release line is signed by its own key, and `8.0/Dockerfile` must
+import it or apt refuses the channel outright:
+`The repository '... mongodb-enterprise/9.0 InRelease' is not signed`.
+The `development` channel is signed by `server-dev.asc`, which is why a
+pre-GA image can build while the GA channel of the same version cannot.
+
+The 9.x key is published **major-only** as
+`https://pgp.mongodb.com/server-9.asc`
+(`B3B42B6C39E5CDDEC0A27E3CF366D55B602E502D`, "MongoDB 9 Release Signing
+Key") — `server-9.0.asc` is a 404. Confirm which key signs a channel with:
+
+```bash
+curl -fsSL https://repo.mongodb.com/apt/ubuntu/dists/noble/mongodb-enterprise/<channel>/InRelease | gpg --verify
+```
+
 ## Release discovery and package gate
 
 For an update request that does not name a version, check the tracked release
