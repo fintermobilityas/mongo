@@ -74,6 +74,29 @@ Always commit and push the exact Dockerfile and `publish.ps1` source before
 publishing the image. After publication, verify that the manifest provenance
 records that committed revision.
 
+## Publishing through the workflow
+
+`.github/workflows/publish.yml` ("Publish image") publishes the image. A push
+to a `finter-*` branch that changes `publish.ps1` or `8.0/Dockerfile` starts
+it, also when the push creates the branch. It builds `./8.0` with the
+parameter defaults of `publish.ps1`, checks the Enterprise package inventory
+and `mongod --version`, pushes
+`ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion>` with the job's
+token, and prints `Published <image>:<tag>@<digest>` plus the provenance
+revision. It refuses to overwrite a published tag and to create a package.
+
+- Dry run: `gh workflow run publish.yml -R fintermobilityas/mongo --ref <branch> -f push=false`.
+- Publish again after a failed run: the same with `-f push=true`.
+- Pull requests that change those files get a dry run.
+
+The package is private and linked to `fintermobilityas/youpark.no`. Never
+change its visibility or its repository link. Its **Manage Actions access**
+gives this repository the Write role; that setting exists only in the
+package's web settings.
+
+`pwsh ./publish.ps1` from a machine with Docker and a ghcr login (see
+Pre-flight checks) stays the manual fallback for a person.
+
 ## Upgrade recipes
 
 ### Patch bump on the current release line (e.g. 8.2.7 → 8.2.8)
@@ -89,10 +112,10 @@ Do it on the existing `finter-<major.minor>` branch.
 3. Edit `8.0/Dockerfile` `ARG MONGO_VERSION` to match.
 4. Commit `publish.ps1` and `8.0/Dockerfile` as
    `Update to mongodb 8.2.8`, then push the commit to `finter-8.2`.
-5. From that clean committed source, run `pwsh ./publish.ps1` to build and push
-   the image.
-6. Verify the image version, Enterprise package inventory, manifest digest,
-   and manifest provenance against the pushed source commit.
+5. The push starts the publish workflow, which builds, checks and pushes the
+   image from that clean committed source.
+6. Read the manifest digest and provenance revision from the workflow run and
+   check them against the pushed source commit.
 7. Open a version-bump PR in `../youpark.no` (see below).
 
 ### Minor/major bump (e.g. 8.2 → 8.3)
@@ -109,8 +132,9 @@ New release line. Create a new branch.
      (`"8.2"` while 8.3 is pre-GA — the `/8.3` channel only has
      `mongodb-database-tools` until GA). Switch to `"8.3"` once mongosh
      lands there.
-3. Commit the image source and push the new `finter-8.3` branch.
-4. Build + smoke test from that clean committed source:
+3. Commit the image source and push the new `finter-8.3` branch. The push
+   starts the publish workflow, which builds, checks and pushes the image.
+4. To build and smoke test by hand instead:
 
    ```bash
    docker build \
@@ -121,9 +145,11 @@ New release line. Create a new branch.
    docker run --rm mongo-enterprise:8.3.0 mongod --version
    ```
 
-5. `pwsh ./publish.ps1` to tag + push to `ghcr.io/fintermobilityas/mongo-enterprise:8.3.0`.
+5. Read the digest and provenance of `ghcr.io/fintermobilityas/mongo-enterprise:8.3.0`
+   from the workflow run (`pwsh ./publish.ps1` is the manual fallback).
 6. Verify the manifest digest and provenance against the pushed source commit.
-7. Change GitHub default branch:
+7. Change GitHub default branch (needs admin access; a maintenance agent
+   leaves this one step to a person and names it in its report):
 
    ```bash
    gh api -X PATCH repos/fintermobilityas/mongo -f default_branch=finter-8.3
@@ -170,6 +196,9 @@ green"), run this loop in the PR's worktree:
    and report the merge commit.
 
 ## Pre-flight checks
+
+For publishing through the workflow, only `gh auth status` applies. The rest
+is for the manual `pwsh ./publish.ps1` fallback.
 
 - `docker info` — daemon running.
 - `docker login ghcr.io` — check `~/.docker/config.json` has `ghcr.io`.

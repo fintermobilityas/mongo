@@ -187,6 +187,7 @@ jobs:
             -t "${IMAGE}:${VERSION}" ./8.0
 
           digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/metadata.json")
+          echo "Published ${IMAGE}:${VERSION}@${digest}"
           docker buildx imagetools inspect "${IMAGE}@${digest}"
 
           provenance=$(docker buildx imagetools inspect "${IMAGE}@${digest}" --format '{{json .Provenance}}')
@@ -194,6 +195,7 @@ jobs:
           revision=$(jq -r '.SLSA.runDetails.metadata.buildkit_metadata.vcs.revision
             // .SLSA.metadata."https://mobyproject.org/buildkit@v1#metadata".vcs.revision
             // empty' <<<"$provenance")
+          echo "Provenance source revision: ${revision:-missing}"
 
           {
             echo "### Published ${IMAGE}:${VERSION}"
