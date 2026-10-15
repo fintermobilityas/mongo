@@ -78,12 +78,13 @@ records that committed revision.
 
 `.github/workflows/publish.yml` ("Publish image") publishes the image. A push
 to a `finter-*` branch that changes `publish.ps1` or `8.0/Dockerfile` starts
-it, also when the push creates the branch. It builds `./8.0` with the
-parameter defaults of `publish.ps1`, checks the Enterprise package inventory
-and `mongod --version`, pushes
-`ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion>` with the job's
-token, and prints `Published <image>:<tag>@<digest>` plus the provenance
-revision. It refuses to overwrite a published tag and to create a package.
+it, also when the push creates the branch. It builds `./8.0` once with the
+parameter defaults of `publish.ps1` and pushes that image without a tag,
+checks the Enterprise package inventory, `mongod --version` and the
+provenance revision of that exact image, and only then tags its digest
+`ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion>`, with the job's
+token. It prints `Published <image>:<tag>@<digest>` plus the provenance
+revision. A run that fails a check leaves an untagged version in the package. It refuses to overwrite a published tag and to create a package.
 So when a pre-GA build was published under the version it gets at GA (as
 9.0.0 was from `9.0.0~latest`), the workflow cannot replace that tag with the
 GA build; a person decides and publishes it with `pwsh ./publish.ps1`.

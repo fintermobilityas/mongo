@@ -1,8 +1,9 @@
 name: Publish image
 
-# Builds ./8.0 with the build arguments of publish.ps1, checks the Enterprise
-# package inventory and `mongod --version`, and pushes
-# ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion> with this job's token.
+# Builds ./8.0 once with the build arguments of publish.ps1, checks the
+# Enterprise package inventory and `mongod --version` of that image, and gives
+# its digest the tag ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion>
+# with this job's token.
 #
 # - A push to a finter-* branch that changes publish.ps1 or 8.0/Dockerfile publishes.
 # - workflow_dispatch builds and checks only, unless the `push` input is true.
@@ -140,30 +141,46 @@ jobs:
       - name: Build ./8.0
         run: |
           mapfile -t build_args < "$RUNNER_TEMP/build-args"
-          docker buildx build "${build_args[@]}" --platform linux/amd64 --load \
-            -t "mongo-enterprise:${VERSION}" ./8.0
+          if [ "$PUSH" = true ]; then
+            # Build once and push the image without a tag. The checks below run
+            # this exact image, and only then does its digest get the tag.
+            # A run that fails a check leaves an untagged version in the package.
+            docker buildx build "${build_args[@]}" --platform linux/amd64 --provenance=mode=min \
+              --output "type=image,name=${IMAGE},push-by-digest=true,push=true" \
+              --metadata-file "$RUNNER_TEMP/metadata.json" ./8.0
+            digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/metadata.json")
+            docker pull --platform linux/amd64 "${IMAGE}@${digest}"
+            echo "DIGEST=${digest}" >> "$GITHUB_ENV"
+            echo "CHECK_IMAGE=${IMAGE}@${digest}" >> "$GITHUB_ENV"
+          else
+            docker buildx build "${build_args[@]}" --platform linux/amd64 --load \
+              -t "mongo-enterprise:${VERSION}" ./8.0
+            echo "CHECK_IMAGE=mongo-enterprise:${VERSION}" >> "$GITHUB_ENV"
+          fi
 
       - name: Check the package inventory
         run: |
-          docker run --rm --entrypoint dpkg-query "mongo-enterprise:${VERSION}" \
-            -W '-f=${Package} ${Version}\n' \
+          docker run --rm --entrypoint dpkg-query "$CHECK_IMAGE" \
+            -W '-f=${Package} ${db:Status-Status} ${Version}\n' \
             mongodb-enterprise mongodb-enterprise-database mongodb-enterprise-server \
             mongodb-enterprise-shell mongodb-enterprise-mongos mongodb-enterprise-tools \
             mongodb-enterprise-database-tools-extra mongodb-enterprise-cryptd mongodb-mongosh \
             | tee "$RUNNER_TEMP/packages.txt"
 
+          # Only packages in the "installed" state count: dpkg-query also lists a
+          # removed package that kept its configuration files.
           # cryptd and mongosh have their own version numbers; the rest are pinned by the Dockerfile.
           for package in mongodb-enterprise mongodb-enterprise-database mongodb-enterprise-server \
             mongodb-enterprise-shell mongodb-enterprise-mongos mongodb-enterprise-tools \
             mongodb-enterprise-database-tools-extra; do
-            installed=$(awk -v p="$package" '$1 == p { print $2 }' "$RUNNER_TEMP/packages.txt")
+            installed=$(awk -v p="$package" '$1 == p && $2 == "installed" { print $3 }' "$RUNNER_TEMP/packages.txt")
             if [ "$installed" != "$PACKAGE_VERSION" ]; then
               echo "::error::${package} is '${installed}', expected ${PACKAGE_VERSION}"
               exit 1
             fi
           done
           for package in mongodb-enterprise-cryptd mongodb-mongosh; do
-            if [ -z "$(awk -v p="$package" '$1 == p { print $2 }' "$RUNNER_TEMP/packages.txt")" ]; then
+            if [ -z "$(awk -v p="$package" '$1 == p && $2 == "installed" { print $3 }' "$RUNNER_TEMP/packages.txt")" ]; then
               echo "::error::${package} is not installed"
               exit 1
             fi
@@ -171,7 +188,7 @@ jobs:
 
       - name: Check mongod --version
         run: |
-          output=$(docker run --rm -e GLIBC_TUNABLES=glibc.pthread.rseq=1 "mongo-enterprise:${VERSION}" mongod --version)
+          output=$(docker run --rm -e GLIBC_TUNABLES=glibc.pthread.rseq=1 "$CHECK_IMAGE" mongod --version)
           echo "$output"
 
           build_info=$(awk 'started; /^Build Info: /{ sub(/^Build Info: /, ""); print; started = 1 }' <<<"$output")
@@ -183,40 +200,45 @@ jobs:
             echo "::error::mongod does not report version ${VERSION} with the enterprise module"
             exit 1
           fi
-          echo "MONGOD_VERSION=$(jq -r .version <<<"$build_info")" >> "$GITHUB_ENV"
+          mongod_version=$(jq -r .version <<<"$build_info")
+          echo "mongod reports ${mongod_version} with the enterprise module"
+          echo "MONGOD_VERSION=${mongod_version}" >> "$GITHUB_ENV"
 
-      - name: Push to ghcr.io
+      - name: Check the provenance and tag the checked image
         if: env.PUSH == 'true'
         run: |
-          mapfile -t build_args < "$RUNNER_TEMP/build-args"
-          docker buildx build "${build_args[@]}" --platform linux/amd64 --provenance=mode=min --push \
-            --metadata-file "$RUNNER_TEMP/metadata.json" \
-            -t "${IMAGE}:${VERSION}" ./8.0
-
-          digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/metadata.json")
-          echo "Published ${IMAGE}:${VERSION}@${digest}"
-          docker buildx imagetools inspect "${IMAGE}@${digest}"
-
-          provenance=$(docker buildx imagetools inspect "${IMAGE}@${digest}" --format '{{json .Provenance}}')
+          docker buildx imagetools inspect "${IMAGE}@${DIGEST}"
+          provenance=$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .Provenance}}')
           echo "$provenance" | jq .
           revision=$(jq -r '.SLSA.runDetails.metadata.buildkit_metadata.vcs.revision
             // .SLSA.metadata."https://mobyproject.org/buildkit@v1#metadata".vcs.revision
             // empty' <<<"$provenance")
           echo "Provenance source revision: ${revision:-missing}"
+          if [ "$revision" != "$GITHUB_SHA" ]; then
+            echo "::error::The provenance of ${DIGEST} records revision '${revision:-missing}', expected ${GITHUB_SHA}; the tag was not set"
+            exit 1
+          fi
+
+          # One source image index: imagetools makes an exact copy, so the tag
+          # points at the digest that passed the checks.
+          docker buildx imagetools create -t "${IMAGE}:${VERSION}" "${IMAGE}@${DIGEST}"
+          tagged=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{json .Manifest}}' | jq -r .digest)
+          if [ "$tagged" != "$DIGEST" ]; then
+            echo "::error::${IMAGE}:${VERSION} points at ${tagged}, expected the checked ${DIGEST}"
+            exit 1
+          fi
+          echo "Published ${IMAGE}:${VERSION}@${DIGEST}"
 
           {
             echo "### Published ${IMAGE}:${VERSION}"
             echo
-            echo "- Reference: \`${IMAGE}:${VERSION}@${digest}\`"
-            echo "- Digest: \`${digest}\`"
+            echo "- Reference: \`${IMAGE}:${VERSION}@${DIGEST}\`"
+            echo "- Digest: \`${DIGEST}\`"
             echo "- mongod: \`${MONGOD_VERSION}\`"
-            echo "- Provenance source revision: \`${revision:-missing}\` (this run: \`${GITHUB_SHA}\`)"
+            echo "- Provenance source revision: \`${revision}\` (this run: \`${GITHUB_SHA}\`)"
+            echo "- Packages:"
+            sed 's/^/  - /' "$RUNNER_TEMP/packages.txt"
           } >> "$GITHUB_STEP_SUMMARY"
-
-          if [ "$revision" != "$GITHUB_SHA" ]; then
-            echo "::error::The provenance of ${digest} records revision '${revision}', expected ${GITHUB_SHA}"
-            exit 1
-          fi
 
       - name: Summarize the dry run
         if: env.PUSH != 'true'
