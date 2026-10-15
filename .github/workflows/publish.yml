@@ -34,8 +34,13 @@ permissions:
   contents: read
   packages: write
 
+# Every publishing run, from any ref, shares one group, so the tag check and
+# the push of one run finish before the next run checks its tag. Dry runs only
+# queue behind dry runs of the same ref. GitHub keeps one pending run per
+# group: a third publishing run cancels the pending one, which then needs a
+# new dispatch with push=true.
 concurrency:
-  group: publish-image-${{ github.ref }}
+  group: ${{ (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push)) && 'publish-image' || format('publish-image-dry-run-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
@@ -170,8 +175,10 @@ jobs:
           echo "$output"
 
           build_info=$(awk 'started; /^Build Info: /{ sub(/^Build Info: /, ""); print; started = 1 }' <<<"$output")
+          # The exact version, or the version followed by a pre-release suffix
+          # such as -rc0. 9.0.4 does not accept 9.0.40.
           if ! jq -e --arg version "$VERSION" \
-            '(.version | startswith($version)) and any((.modules // [])[]; . == "enterprise")' \
+            '(.version == $version or (.version | startswith($version + "-"))) and any((.modules // [])[]; . == "enterprise")' \
             <<<"$build_info" > /dev/null; then
             echo "::error::mongod does not report version ${VERSION} with the enterprise module"
             exit 1

@@ -89,7 +89,9 @@ So when a pre-GA build was published under the version it gets at GA (as
 GA build; a person decides and publishes it with `pwsh ./publish.ps1`.
 
 - Dry run: `gh workflow run publish.yml -R fintermobilityas/mongo --ref <branch> -f push=false`.
-- Publish again after a failed run: the same with `-f push=true`.
+- Publish again after a failed or cancelled run: the same with `-f push=true`.
+  Publishing runs from every branch wait for each other, so two runs never
+  check and push the same tag at once.
 - Pull requests that change those files get a dry run.
 
 The package is private and linked to `fintermobilityas/youpark.no`. Never
