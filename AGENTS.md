@@ -84,6 +84,9 @@ and `mongod --version`, pushes
 `ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion>` with the job's
 token, and prints `Published <image>:<tag>@<digest>` plus the provenance
 revision. It refuses to overwrite a published tag and to create a package.
+So when a pre-GA build was published under the version it gets at GA (as
+9.0.0 was from `9.0.0~latest`), the workflow cannot replace that tag with the
+GA build; a person decides and publishes it with `pwsh ./publish.ps1`.
 
 - Dry run: `gh workflow run publish.yml -R fintermobilityas/mongo --ref <branch> -f push=false`.
 - Publish again after a failed run: the same with `-f push=true`.
