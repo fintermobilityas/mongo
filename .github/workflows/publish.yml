@@ -1,11 +1,13 @@
 name: Publish image
 
-# Builds ./8.0 once with the build arguments of publish.ps1, checks the
+# Builds ./image once with the build arguments of publish.ps1, checks the
 # Enterprise package inventory and `mongod --version` of that image, and gives
 # its digest the tag ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion>
 # with this job's token.
 #
-# - A push to a finter-* branch that changes publish.ps1 or 8.0/Dockerfile publishes.
+# - A push to main that changes publish.ps1 or image/ publishes. When the tag is
+#   published already and the push did not change the version in publish.ps1,
+#   there is nothing to publish and the run ends green.
 # - workflow_dispatch builds and checks only, unless the `push` input is true.
 # - A pull request builds and checks only.
 #
@@ -15,14 +17,14 @@ name: Publish image
 on:
   push:
     branches:
-      - 'finter-*'
+      - main
     paths:
       - publish.ps1
-      - 8.0/Dockerfile
+      - 'image/**'
   pull_request:
     paths:
       - publish.ps1
-      - 8.0/Dockerfile
+      - 'image/**'
       - .github/workflows/publish.yml
   workflow_dispatch:
     inputs:
@@ -61,16 +63,22 @@ jobs:
 
       - name: Read the build arguments from publish.ps1
         shell: pwsh
+        env:
+          BEFORE: ${{ github.event.before }}
         run: |
-          $parseErrors = $null
-          $ast = [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path publish.ps1).Path, [ref]$null, [ref]$parseErrors)
-          if ($parseErrors.Count -gt 0) { throw "publish.ps1 does not parse: $($parseErrors -join '; ')" }
-
-          $defaults = @{}
-          foreach ($parameter in $ast.ParamBlock.Parameters) {
-            $value = if ($parameter.DefaultValue) { [string]$parameter.DefaultValue.SafeGetValue() } else { '' }
-            $defaults[$parameter.Name.VariablePath.UserPath] = $value
+          function Get-Defaults([string]$source) {
+            $parseErrors = $null
+            $ast = [System.Management.Automation.Language.Parser]::ParseInput($source, [ref]$null, [ref]$parseErrors)
+            if ($parseErrors.Count -gt 0) { throw "publish.ps1 does not parse: $($parseErrors -join '; ')" }
+            $values = @{}
+            foreach ($parameter in $ast.ParamBlock.Parameters) {
+              $value = if ($parameter.DefaultValue) { [string]$parameter.DefaultValue.SafeGetValue() } else { '' }
+              $values[$parameter.Name.VariablePath.UserPath] = $value
+            }
+            $values
           }
+
+          $defaults = Get-Defaults (Get-Content -Raw publish.ps1)
 
           $names = [ordered]@{
             MongoVersion        = 'VERSION'
@@ -86,13 +94,35 @@ jobs:
           }
           if (-not $defaults.MongoVersion) { throw 'publish.ps1 has an empty $MongoVersion' }
 
-      - name: Check that 8.0/Dockerfile matches publish.ps1
+          # The version before this push. A push that does not change it has
+          # nothing to publish when its tag exists (the tag check below).
+          $previous = ''
+          if ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:BEFORE -match '^[0-9a-f]{40}$' -and $env:BEFORE -notmatch '^0+$') {
+            git fetch --no-tags --depth=1 origin $env:BEFORE
+            if ($LASTEXITCODE -eq 0) {
+              $source = git show "$($env:BEFORE):publish.ps1"
+              if ($LASTEXITCODE -eq 0) {
+                try { $previous = [string](Get-Defaults ($source -join "`n")).MongoVersion } catch { $previous = '' }
+              }
+            }
+            $global:LASTEXITCODE = 0
+          }
+          "PREVIOUS_VERSION=$previous" >> $env:GITHUB_ENV
+          "Version before this push: $(if ($previous) { $previous } else { 'unknown' })"
+
+      - name: Check that image/Dockerfile matches publish.ps1
         run: |
-          dockerfile_version=$(sed -n 's/^ARG MONGO_VERSION=//p' 8.0/Dockerfile)
-          if [ "$dockerfile_version" != "$PACKAGE_VERSION" ]; then
-            echo "::error::8.0/Dockerfile has ARG MONGO_VERSION=$dockerfile_version, publish.ps1 has \$MongoPackageVersion = $PACKAGE_VERSION"
-            exit 1
-          fi
+          check() {
+            local value
+            value=$(sed -n "s/^ARG $1=//p" image/Dockerfile)
+            if [ "$value" != "$3" ]; then
+              echo "::error::image/Dockerfile has ARG $1=$value, publish.ps1 has \$$2 = $3"
+              exit 1
+            fi
+          }
+          check MONGO_VERSION MongoPackageVersion "$PACKAGE_VERSION"
+          check MONGO_MAJOR MongoAptChannel "$APT_CHANNEL"
+          check MONGOSH_CHANNEL MongoMongoshChannel "$MONGOSH_CHANNEL"
 
           # The same arguments, in the same order, as publish.ps1 passes to docker build.
           : > "$RUNNER_TEMP/build-args"
@@ -131,14 +161,21 @@ jobs:
           fi
 
           if jq -e --arg tag "$VERSION" 'any((.tags // [])[]; . == $tag)' "$RUNNER_TEMP/tags.json" > /dev/null; then
-            echo "::error::${IMAGE}:${VERSION} already exists. Published tags are never overwritten; bump the version in publish.ps1 and 8.0/Dockerfile."
+            if [ "$GITHUB_EVENT_NAME" = push ] && [ "$PREVIOUS_VERSION" = "$VERSION" ]; then
+              echo "::notice::Nothing to publish: ${IMAGE}:${VERSION} is published, and this push did not change the version in publish.ps1."
+              echo "SKIP=true" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            echo "::error::${IMAGE}:${VERSION} already exists. Published tags are never overwritten; bump the version in publish.ps1 and image/Dockerfile."
             exit 1
           fi
           echo "${IMAGE}:${VERSION} is not published yet."
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        if: env.SKIP != 'true'
 
-      - name: Build ./8.0
+      - name: Build ./image
+        if: env.SKIP != 'true'
         run: |
           mapfile -t build_args < "$RUNNER_TEMP/build-args"
           if [ "$PUSH" = true ]; then
@@ -147,18 +184,19 @@ jobs:
             # A run that fails a check leaves an untagged version in the package.
             docker buildx build "${build_args[@]}" --platform linux/amd64 --provenance=mode=min \
               --output "type=image,name=${IMAGE},push-by-digest=true,push=true" \
-              --metadata-file "$RUNNER_TEMP/metadata.json" ./8.0
+              --metadata-file "$RUNNER_TEMP/metadata.json" ./image
             digest=$(jq -er '."containerimage.digest"' "$RUNNER_TEMP/metadata.json")
             docker pull --platform linux/amd64 "${IMAGE}@${digest}"
             echo "DIGEST=${digest}" >> "$GITHUB_ENV"
             echo "CHECK_IMAGE=${IMAGE}@${digest}" >> "$GITHUB_ENV"
           else
             docker buildx build "${build_args[@]}" --platform linux/amd64 --load \
-              -t "mongo-enterprise:${VERSION}" ./8.0
+              -t "mongo-enterprise:${VERSION}" ./image
             echo "CHECK_IMAGE=mongo-enterprise:${VERSION}" >> "$GITHUB_ENV"
           fi
 
       - name: Check the package inventory
+        if: env.SKIP != 'true'
         run: |
           docker run --rm --entrypoint dpkg-query "$CHECK_IMAGE" \
             -W '-f=${Package} ${db:Status-Status} ${Version}\n' \
@@ -187,6 +225,7 @@ jobs:
           done
 
       - name: Check mongod --version
+        if: env.SKIP != 'true'
         run: |
           output=$(docker run --rm -e GLIBC_TUNABLES=glibc.pthread.rseq=1 "$CHECK_IMAGE" mongod --version)
           echo "$output"
@@ -205,7 +244,7 @@ jobs:
           echo "MONGOD_VERSION=${mongod_version}" >> "$GITHUB_ENV"
 
       - name: Check the provenance and tag the checked image
-        if: env.PUSH == 'true'
+        if: env.PUSH == 'true' && env.SKIP != 'true'
         run: |
           docker buildx imagetools inspect "${IMAGE}@${DIGEST}"
           provenance=$(docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{json .Provenance}}')
@@ -250,3 +289,8 @@ jobs:
             echo "- Packages:"
             sed 's/^/  - /' "$RUNNER_TEMP/packages.txt"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Summarize a push with nothing to publish
+        if: env.SKIP == 'true'
+        run: |
+          echo "### Nothing to publish: ${IMAGE}:${VERSION} is published, and this push did not change the version" >> "$GITHUB_STEP_SUMMARY"

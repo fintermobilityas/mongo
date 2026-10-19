@@ -6,7 +6,7 @@ param (
 )
 
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$buildPath = Join-Path -Path $scriptPath -ChildPath "8.0"
+$buildPath = Join-Path -Path $scriptPath -ChildPath "image"
 
 $buildArgs = @()
 
