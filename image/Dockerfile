@@ -1,10 +1,9 @@
-#
-# NOTE: THIS DOCKERFILE IS GENERATED VIA "apply-templates.sh"
-#
-# PLEASE DO NOT EDIT IT DIRECTLY.
-#
+# The recipe of ghcr.io/fintermobilityas/mongo-enterprise (see AGENTS.md). It
+# started as the mongo image of docker-library/mongo. publish.ps1 passes
+# MONGO_VERSION, MONGO_MAJOR and MONGOSH_CHANNEL; the defaults below must be the
+# same values, and the "Publish image" workflow checks that.
 
-FROM ubuntu:jammy
+FROM ubuntu:noble
 
 # add our user and group first to make sure their IDs get assigned consistently, regardless of whatever dependencies get added
 RUN set -eux; \
@@ -26,8 +25,8 @@ RUN set -eux; \
 # grab gosu for easy step-down from root (https://github.com/tianon/gosu/releases)
 ENV GOSU_VERSION 1.19
 # grab "js-yaml" for parsing mongod's YAML config files (https://github.com/nodeca/js-yaml/releases)
-ENV JSYAML_VERSION 3.13.1
-ENV JSYAML_CHECKSUM 662e32319bdd378e91f67578e56a34954b0a2e33aca11d70ab9f4826af24b941
+ENV JSYAML_VERSION=3.13.1
+ENV JSYAML_CHECKSUM=662e32319bdd378e91f67578e56a34954b0a2e33aca11d70ab9f4826af24b941
 
 RUN set -eux; \
 	\
@@ -59,12 +58,18 @@ RUN set -eux; \
 	\
 # download/install MongoDB PGP keys
 	export GNUPGHOME="$(mktemp -d)"; \
-	wget -O KEYS 'https://pgp.mongodb.com/server-7.0.asc'; \
-	gpg --batch --import KEYS; \
+	wget -O mongodb-server-8.0.asc 'https://pgp.mongodb.com/server-8.0.asc'; \
+	wget -O mongodb-server-9.asc 'https://pgp.mongodb.com/server-9.asc'; \
+	wget -O mongodb-server-dev.asc 'https://pgp.mongodb.com/server-dev.asc'; \
+	gpg --batch --import mongodb-server-8.0.asc mongodb-server-9.asc mongodb-server-dev.asc; \
 	mkdir -p /etc/apt/keyrings; \
-	gpg --batch --export --armor 'E58830201F7DD82CD808AA84160D26BB1785BA38' > /etc/apt/keyrings/mongodb.asc; \
+	gpg --batch --export --armor \
+		'28DE23AF08040FB24C33F36381B0EBBBADCEA95C' \
+		'4B0752C1BCA238C0B4EE14DC41DE058A4E7DCA05' \
+		'B3B42B6C39E5CDDEC0A27E3CF366D55B602E502D' \
+		> /etc/apt/keyrings/mongodb.asc; \
 	gpgconf --kill all; \
-	rm -rf "$GNUPGHOME" KEYS; \
+	rm -rf "$GNUPGHOME" mongodb-server-8.0.asc mongodb-server-9.asc mongodb-server-dev.asc; \
 	\
 	apt-mark auto '.*' > /dev/null; \
 	apt-mark manual $savedAptMark > /dev/null; \
@@ -81,16 +86,22 @@ RUN mkdir /docker-entrypoint-initdb.d
 # Options for MONGO_PACKAGE: mongodb-org OR mongodb-enterprise
 # Options for MONGO_REPO: repo.mongodb.org OR repo.mongodb.com
 # Example: docker build --build-arg MONGO_PACKAGE=mongodb-enterprise --build-arg MONGO_REPO=repo.mongodb.com .
-ARG MONGO_PACKAGE=mongodb-org
-ARG MONGO_REPO=repo.mongodb.org
+ARG MONGO_PACKAGE=mongodb-enterprise
+ARG MONGO_REPO=repo.mongodb.com
 ENV MONGO_PACKAGE=${MONGO_PACKAGE} MONGO_REPO=${MONGO_REPO}
 
-ENV MONGO_MAJOR 7.0
-RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu jammy/${MONGO_PACKAGE%-unstable}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE%-unstable}.list"
+ARG MONGO_MAJOR=9.0
+ARG MONGOSH_CHANNEL=9.0
+ENV MONGO_MAJOR=${MONGO_MAJOR} MONGOSH_CHANNEL=${MONGOSH_CHANNEL}
+RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu noble/${MONGO_PACKAGE%-unstable}/$MONGO_MAJOR multiverse" | tee "/etc/apt/sources.list.d/${MONGO_PACKAGE%-unstable}.list" \
+	&& if [ -n "$MONGOSH_CHANNEL" ] && [ "$MONGOSH_CHANNEL" != "$MONGO_MAJOR" ]; then \
+		echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt/ubuntu noble/${MONGO_PACKAGE%-unstable}/$MONGOSH_CHANNEL multiverse" | tee /etc/apt/sources.list.d/mongodb-mongosh.list; \
+	fi
 
-# https://docs.mongodb.org/master/release-notes/7.0/
-ENV MONGO_VERSION 7.0.45
-# 09/24/2026, https://github.com/mongodb/mongo/tree/a52313e13ab55c9bddf7c3ff91dab286fa381796
+# https://www.mongodb.com/docs/manual/release-notes/9.0/
+ARG MONGO_VERSION=9.0.4
+ENV MONGO_VERSION=${MONGO_VERSION}
+# 2026-10-13, mongodb-enterprise 9.0.4 from the 9.0 GA apt channel
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
@@ -112,7 +123,11 @@ VOLUME /data/db /data/configdb
 
 # ensure that if running as custom user that "mongosh" has a valid "HOME"
 # https://github.com/docker-library/mongo/issues/524
-ENV HOME /data/db
+ENV HOME=/data/db
+
+# ensure that glibc isn't using rseq so that google-tcmalloc can
+# https://www.mongodb.com/docs/manual/administration/tcmalloc-performance/#disable-glibc-rseq
+ENV GLIBC_TUNABLES=glibc.pthread.rseq=0
 
 COPY docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]

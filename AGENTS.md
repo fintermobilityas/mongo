@@ -1,68 +1,75 @@
-# Finter MongoDB Docker — version upgrade playbook
+# Finter MongoDB Docker image
 
-This fork of `docker-library/mongo` publishes
-`ghcr.io/fintermobilityas/mongo-enterprise:<version>` for youpark.no.
+This repository publishes `ghcr.io/fintermobilityas/mongo-enterprise:<version>`,
+the MongoDB Enterprise image for youpark.no. It keeps only the files of that
+image. It started as a fork of `docker-library/mongo` and no longer tracks it.
 
-## What's actually built
+## What is built
 
-`publish.ps1` builds **`./8.0/Dockerfile`** regardless of the version being
-released. The directory name is historical — it is the Finter-customized
-Dockerfile (enterprise package, PGP keys, etc.). Everything passed through
-`--build-arg` overrides the defaults inside that Dockerfile.
+| Path | What it is |
+|---|---|
+| `image/Dockerfile` | The recipe: Ubuntu noble, the Enterprise packages from `repo.mongodb.com`, the release signing keys |
+| `image/docker-entrypoint.sh` | The entrypoint, which the Dockerfile copies |
+| `publish.ps1` | The version and the apt channels (its parameter defaults), and the manual publish fallback |
+| `.github/workflows/publish.yml` | "Publish image": builds, checks and publishes |
 
-The other version directories (today `7.0/`) are regenerated from the
-`mongo-vendor` upstream templates by `apply-templates.sh` from `versions.json`,
-and are **not** used by the build. `apply-templates.sh` skips `8.0/`, so the
-"Verify Templating" check never overwrites the image recipe.
+`publish.ps1` builds `./image` with `--build-arg MONGO_VERSION`, `MONGO_MAJOR`
+and `MONGOSH_CHANNEL`. The `ARG` defaults in `image/Dockerfile` must be the
+same values; "Publish image" checks that.
 
-## Branch layout
+## Branches
 
-- `master` — tracks `mongo-vendor/master` (upstream `docker-library/mongo`).
-- `finter-<major.minor>` — per-release-line branches. The GitHub default
-  branch points at the currently-shipping one. A new major/minor bump gets a
-  new branch; patch bumps go on the existing one.
-- Default branch for `fintermobilityas/mongo` is set via
-  `gh api -X PATCH repos/fintermobilityas/mongo -f default_branch=<branch>`.
+- `main` is the only working branch and the default branch. Each change goes
+  to `main`, also a new minor or major line. There is no default-branch switch.
+- `master` and the `finter-*` branches are the history of the old layout
+  (upstream tracking and one branch for each release line). They stay for
+  reference; do not work on them.
 
-## Apt channels (critical — trips everyone up)
+## Apt channels (critical: this trips everyone up)
 
 Two MongoDB apt channels are relevant:
 
 | Channel | URL tail | Versions look like | When to use |
 |---|---|---|---|
 | `development` | `/mongodb-enterprise/development` | `X.Y.Z~latest` (rolling) | Pre-GA (RCs, unreleased majors) |
-| `<major.minor>` GA | `/mongodb-enterprise/8.2` etc. | `X.Y.Z` (pinned) | Once that line has GA'd |
+| `<major.minor>` GA | `/mongodb-enterprise/9.0` etc. | `X.Y.Z` (pinned) | Once that line has GA'd |
 
-`mongodb-enterprise/8.3/` etc. **exist before the line GAs** but only
-contain `mongodb-database-tools` until GA. `mongodb-enterprise=8.3.0` will
+`mongodb-enterprise/9.1/` etc. **exist before the line GAs** but only
+contain `mongodb-database-tools` until GA. `mongodb-enterprise=9.1.0` will
 not install from that channel until MongoDB tags the GA build.
 
 `~` sorts as less-than-empty in dpkg semantics, so
-`apt-get install mongodb-enterprise=8.3.0` will **not** match
-`8.3.0~latest`. Use the suffixed version explicitly when pulling from
+`apt-get install mongodb-enterprise=9.1.0` will **not** match
+`9.1.0~latest`. Use the suffixed version explicitly when pulling from
 `development`.
 
 ## Release signing keys (the other channel trap)
 
-Every GA release line is signed by its own key, and `8.0/Dockerfile` must
+Each major GA series has its own signing key, and `image/Dockerfile` must
 import it or apt refuses the channel outright:
 `The repository '... mongodb-enterprise/9.0 InRelease' is not signed`.
-The `development` channel is signed by `server-dev.asc`, which is why a
-pre-GA image can build while the GA channel of the same version cannot.
+The Dockerfile imports `server-8.0.asc` (every 8.x GA channel),
+`server-9.asc` (every 9.x GA channel) and `server-dev.asc` (the
+`development` channel), and exports their fingerprints to
+`/etc/apt/keyrings/mongodb.asc`.
 
 The 9.x key is published **major-only** as
 `https://pgp.mongodb.com/server-9.asc`
 (`B3B42B6C39E5CDDEC0A27E3CF366D55B602E502D`, "MongoDB 9 Release Signing
-Key") — `server-9.0.asc` is a 404. Confirm which key signs a channel with:
+Key"); `server-9.0.asc` is a 404. Confirm which key signs a channel with:
 
 ```bash
 curl -fsSL https://repo.mongodb.com/apt/ubuntu/dists/noble/mongodb-enterprise/<channel>/InRelease | gpg --verify
 ```
 
+A new major (for example 10.0) needs its key: add the download and the
+fingerprint to the key block of `image/Dockerfile`, after you confirm them
+with the command above.
+
 ## Release discovery and package gate
 
 For an update request that does not name a version, check the tracked release
-line's official release notes first (currently [MongoDB 8.3](https://www.mongodb.com/docs/manual/release-notes/8.3/)).
+line's official release notes first (currently [MongoDB 9.0](https://www.mongodb.com/docs/manual/release-notes/9.0/)).
 The newest patch listed there is the latest officially released target, even
 when the Enterprise apt feed has not caught up.
 
@@ -72,30 +79,71 @@ establishes whether this image can be built. If the target is absent from the
 GA feed and no exact development package has been explicitly approved, stop
 before creating branches, images, or file changes and report the feed lag.
 
-Always commit and push the exact Dockerfile and `publish.ps1` source before
-publishing the image. After publication, verify that the manifest provenance
-records that committed revision.
+## Update the image (GA patch, minor or major)
+
+The same steps for each kind of release.
+
+1. Fetch `origin/main` and create a separate worktree on a new branch from
+   its exact commit. Never update from a shared checkout or a cached
+   remote-tracking ref.
+2. Edit the defaults of `publish.ps1`:
+   - `$MongoVersion` (the image tag) and `$MongoPackageVersion` (the apt
+     version): `"X.Y.Z"`.
+   - `$MongoAptChannel` and `$MongoMongoshChannel`: `"X.Y"`. They change
+     only for a new minor or major line.
+3. Edit the `ARG MONGO_VERSION`, `ARG MONGO_MAJOR` and `ARG MONGOSH_CHANNEL`
+   defaults of `image/Dockerfile` to the same values. For a new major, add
+   its signing key (see above).
+4. Commit `publish.ps1` and `image/Dockerfile` as `Update to mongodb X.Y.Z`
+   and open a pull request into `main`. "Publish image" builds and checks the
+   image as a dry run on the pull request; it must pass.
+5. Merge the pull request. The push to `main` starts "Publish image", which
+   builds, checks and publishes the tag from the merged commit.
+6. Read the manifest digest and provenance revision from that run and check
+   them against the merge commit.
+7. Open a version-bump PR in `../youpark.no` (see below).
+
+A pre-GA build from the `development` channel (`X.Y.Z~latest` or
+`X.Y.Z~<githash>`, `$MongoAptChannel = "development"`, and
+`$MongoMongoshChannel` the last GA channel that has `mongodb-mongosh`) needs
+a person's approval first. A pre-GA build holds the tag of its GA version,
+and the workflow never overwrites a published tag, so the GA build then needs
+a person too.
+
+To build and smoke test by hand:
+
+```bash
+docker build \
+  --build-arg MONGO_VERSION=9.0.4 \
+  --build-arg MONGO_MAJOR=9.0 \
+  --build-arg MONGOSH_CHANNEL=9.0 \
+  -t mongo-enterprise:9.0.4 ./image
+docker run --rm -e GLIBC_TUNABLES=glibc.pthread.rseq=1 mongo-enterprise:9.0.4 mongod --version
+```
 
 ## Publishing through the workflow
 
 `.github/workflows/publish.yml` ("Publish image") publishes the image. A push
-to a `finter-*` branch that changes `publish.ps1` or `8.0/Dockerfile` starts
-it, also when the push creates the branch. It builds `./8.0` once with the
-parameter defaults of `publish.ps1` and pushes that image without a tag,
-checks the Enterprise package inventory, `mongod --version` and the
-provenance revision of that exact image, and only then tags its digest
-`ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion>`, with the job's
-token. It prints `Published <image>:<tag>@<digest>` plus the provenance
-revision. A run that fails a check leaves an untagged version in the package. It refuses to overwrite a published tag and to create a package.
-So when a pre-GA build was published under the version it gets at GA (as
-9.0.0 was from `9.0.0~latest`), the workflow cannot replace that tag with the
-GA build; a person decides and publishes it with `pwsh ./publish.ps1`.
+to `main` that changes `publish.ps1` or a file in `image/` starts it. It
+builds `./image` once with the parameter defaults of `publish.ps1` and pushes
+that image without a tag, checks the Enterprise package inventory,
+`mongod --version` and the provenance revision of that exact image, and only
+then tags its digest `ghcr.io/fintermobilityas/mongo-enterprise:<MongoVersion>`,
+with the job's token. It prints `Published <image>:<tag>@<digest>` plus the
+provenance revision. A run that fails a check leaves an untagged version in
+the package.
 
-- Dry run: `gh workflow run publish.yml -R fintermobilityas/mongo --ref <branch> -f push=false`.
+- It never overwrites a published tag and never creates a package. When the
+  tag exists and the push did not change `$MongoVersion` (for example a change
+  of the entrypoint only), there is nothing to publish: the run ends green
+  with the notice "Nothing to publish". When the push changed the version to
+  one whose tag exists, the run fails.
+- Pull requests that change `publish.ps1`, `image/` or the workflow get a dry
+  run: the same build and checks, with nothing pushed.
+- Dry run by hand: `gh workflow run publish.yml -R fintermobilityas/mongo --ref main -f push=false`.
 - Publish again after a failed or cancelled run: the same with `-f push=true`.
-  Publishing runs from every branch wait for each other, so two runs never
-  check and push the same tag at once.
-- Pull requests that change those files get a dry run.
+  Publishing runs wait for each other, so two runs never check and push the
+  same tag at once.
 
 The package is private and linked to `fintermobilityas/youpark.no`. Never
 change its visibility or its repository link. Its **Manage Actions access**
@@ -104,66 +152,6 @@ package's web settings.
 
 `pwsh ./publish.ps1` from a machine with Docker and a ghcr login (see
 Pre-flight checks) stays the manual fallback for a person.
-
-## Upgrade recipes
-
-### Patch bump on the current release line (e.g. 8.2.7 → 8.2.8)
-
-Do it on the existing `finter-<major.minor>` branch.
-
-1. Fetch `origin/finter-8.2` and create a separate worktree from its exact
-   commit. Never update from a shared checkout or a cached remote-tracking ref.
-2. Edit `publish.ps1`:
-   - `$MongoVersion` → `"8.2.8"` (Docker image tag).
-   - `$MongoPackageVersion` → `"8.2.8"` (pinned, from `/8.2` GA channel) **or**
-     `"8.2.8~latest"` if pulling from `development`.
-3. Edit `8.0/Dockerfile` `ARG MONGO_VERSION` to match.
-4. Commit `publish.ps1` and `8.0/Dockerfile` as
-   `Update to mongodb 8.2.8`, then push the commit to `finter-8.2`.
-5. The push starts the publish workflow, which builds, checks and pushes the
-   image from that clean committed source.
-6. Read the manifest digest and provenance revision from the workflow run and
-   check them against the pushed source commit.
-7. Open a version-bump PR in `../youpark.no` (see below).
-
-### Minor/major bump (e.g. 8.2 → 8.3)
-
-New release line. Create a new branch.
-
-1. `git fetch origin && git checkout -b finter-8.3 origin/finter-8.2`.
-2. Edit `publish.ps1`:
-   - `$MongoVersion` = `"8.3.0"` (image tag).
-   - `$MongoPackageVersion` = `"8.3.0~latest"` until 8.3 GA's, then switch
-     to `"8.3.0"` + channel `"8.3"`.
-   - `$MongoAptChannel` = `"development"` pre-GA, `"8.3"` post-GA.
-   - `$MongoMongoshChannel` = last GA channel that has `mongodb-mongosh`
-     (`"8.2"` while 8.3 is pre-GA — the `/8.3` channel only has
-     `mongodb-database-tools` until GA). Switch to `"8.3"` once mongosh
-     lands there.
-3. Commit the image source and push the new `finter-8.3` branch. The push
-   starts the publish workflow, which builds, checks and pushes the image.
-4. To build and smoke test by hand instead:
-
-   ```bash
-   docker build \
-     --build-arg MONGO_VERSION=8.3.0~latest \
-     --build-arg MONGO_MAJOR=development \
-     --build-arg MONGOSH_CHANNEL=8.2 \
-     -t mongo-enterprise:8.3.0 ./8.0
-   docker run --rm mongo-enterprise:8.3.0 mongod --version
-   ```
-
-5. Read the digest and provenance of `ghcr.io/fintermobilityas/mongo-enterprise:8.3.0`
-   from the workflow run (`pwsh ./publish.ps1` is the manual fallback).
-6. Verify the manifest digest and provenance against the pushed source commit.
-7. Change GitHub default branch (needs admin access; a maintenance agent
-   leaves this one step to a person and names it in its report):
-
-   ```bash
-   gh api -X PATCH repos/fintermobilityas/mongo -f default_branch=finter-8.3
-   ```
-
-8. Open a version-bump PR in `../youpark.no`.
 
 ## youpark.no version-bump PR
 
@@ -190,14 +178,14 @@ green"), run this loop in the PR's worktree:
 2. **Feedback gate**: poll unresolved review threads (GraphQL
    `reviewThreads { id isResolved }`) plus new comments via
    `gh api repos/<owner>/<repo>/pulls/<n>/comments` (inline) and
-   `gh api repos/<owner>/<repo>/issues/<n>/comments` (issue-level) — do not
+   `gh api repos/<owner>/<repo>/issues/<n>/comments` (issue-level); do not
    rely on `.../pulls/<n>/reviews` alone, it only lists review events. Verify
    each new comment against the code; if valid, fix, push, reply to the thread
    with the commit hash, then resolve the thread with the `resolveReviewThread`
    mutation. If invalid, reply with evidence and leave it open unless the user
    pre-approved closing.
 3. **Polling**: check CI and threads together every ~30 s in one loop with an
-   explicit timeout (~60 min budget). A push resets CI — re-evaluate from the
+   explicit timeout (~60 min budget). A push resets CI; re-evaluate from the
    new head commit.
 4. **Merge gate**: only when the head commit is CI-green, has zero unresolved
    threads, and `mergeStateStatus` is CLEAN, run `gh pr merge <n> --squash`
@@ -208,30 +196,20 @@ green"), run this loop in the PR's worktree:
 For publishing through the workflow, only `gh auth status` applies. The rest
 is for the manual `pwsh ./publish.ps1` fallback.
 
-- `docker info` — daemon running.
-- `docker login ghcr.io` — check `~/.docker/config.json` has `ghcr.io`.
-- `gh auth status` — need `repo` and ideally `admin:org` for default-branch
-  changes.
-- `which pwsh` — needed for `publish.ps1`.
+- `docker info`: daemon running.
+- `docker login ghcr.io`: check `~/.docker/config.json` has `ghcr.io`.
+- `gh auth status`: need `repo`.
+- `which pwsh`: needed for `publish.ps1`.
 
 ## Gotchas
 
-- `publish.ps1` hardcodes `$buildPath = "8.0"`. Don't add or rename build
+- `publish.ps1` hardcodes `$buildPath = "image"`. Don't add or rename build
   directories expecting `publish.ps1` to find them.
-- This fork has no upstream "GitHub CI" workflow (`ci.yml`, the bashbrew
-  matrix of docker-library). Its action `docker-library/bashbrew` is not on
-  the Actions allowlist of the organization, and it builds the template
-  folders and Windows images that this fork does not ship. "Publish image"
-  builds and checks the image that it ships. Do not bring `ci.yml` back in a
-  merge from `mongo-vendor`.
+- This repository has none of the upstream docker-library files: no
+  templates, no `versions.json`, no other version folders, and no "GitHub CI"
+  or "Verify Templating" workflow. "Publish image" builds and checks the one
+  image that it ships. Do not merge `docker-library/mongo` into `main`.
 - `mongodb-enterprise-cryptd` resolves to the highest version in the chosen
   apt channel, which can be higher than the other packages (e.g. `9.0.0~latest`
   while the rest are `8.3.0~latest`). That's how MongoDB publishes it;
   nothing to fix.
-- The other version directories (today `7.0/`) are upstream-regenerated from
-  `mongo-vendor` templates via `update.sh`. They drift from what we actually
-  ship; don't treat them as the source of truth. Never edit them by hand:
-  "Verify Templating" fails when a file differs from what `apply-templates.sh`
-  writes. To refresh them, run `./update.sh 7.0 8.0` (or the lines that
-  `versions.json` lists): `versions.sh` reads the release data of MongoDB, and
-  a line past its end of life becomes `null` and its directory goes away.
