@@ -10,8 +10,10 @@ released. The directory name is historical — it is the Finter-customized
 Dockerfile (enterprise package, PGP keys, etc.). Everything passed through
 `--build-arg` overrides the defaults inside that Dockerfile.
 
-The `8.2/`, `8.3-rc/` etc. directories on master are regenerated from
-`mongo-vendor` upstream templates and are **not** used by the build.
+The other version directories (today `7.0/`) are regenerated from the
+`mongo-vendor` upstream templates by `apply-templates.sh` from `versions.json`,
+and are **not** used by the build. `apply-templates.sh` skips `8.0/`, so the
+"Verify Templating" check never overwrites the image recipe.
 
 ## Branch layout
 
@@ -220,6 +222,10 @@ is for the manual `pwsh ./publish.ps1` fallback.
   apt channel, which can be higher than the other packages (e.g. `9.0.0~latest`
   while the rest are `8.3.0~latest`). That's how MongoDB publishes it;
   nothing to fix.
-- The `8.3-rc/` and `8.2/` directories on this repo are upstream-regenerated
-  from `mongo-vendor` templates via `update.sh`. They drift from what we
-  actually ship; don't treat them as the source of truth.
+- The other version directories (today `7.0/`) are upstream-regenerated from
+  `mongo-vendor` templates via `update.sh`. They drift from what we actually
+  ship; don't treat them as the source of truth. Never edit them by hand:
+  "Verify Templating" fails when a file differs from what `apply-templates.sh`
+  writes. To refresh them, run `./update.sh 7.0 8.0` (or the lines that
+  `versions.json` lists): `versions.sh` reads the release data of MongoDB, and
+  a line past its end of life becomes `null` and its directory goes away.

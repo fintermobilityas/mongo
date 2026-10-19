@@ -31,6 +31,13 @@ for version; do
 	rcVersion="${version%-rc}"
 	export version rcVersion
 
+	# Finter: 8.0/ holds the recipe of the published Enterprise image (see AGENTS.md), so the
+	# templates do not own it.
+	if [ "$version" = '8.0' ]; then
+		echo "skipping $version (the Finter image recipe) ..."
+		continue
+	fi
+
 	rm -rf "$version"
 
 	if jq -e '.[env.version] | not' versions.json > /dev/null; then
