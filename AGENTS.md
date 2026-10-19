@@ -218,6 +218,12 @@ is for the manual `pwsh ./publish.ps1` fallback.
 
 - `publish.ps1` hardcodes `$buildPath = "8.0"`. Don't add or rename build
   directories expecting `publish.ps1` to find them.
+- This fork has no upstream "GitHub CI" workflow (`ci.yml`, the bashbrew
+  matrix of docker-library). Its action `docker-library/bashbrew` is not on
+  the Actions allowlist of the organization, and it builds the template
+  folders and Windows images that this fork does not ship. "Publish image"
+  builds and checks the image that it ships. Do not bring `ci.yml` back in a
+  merge from `mongo-vendor`.
 - `mongodb-enterprise-cryptd` resolves to the highest version in the chosen
   apt channel, which can be higher than the other packages (e.g. `9.0.0~latest`
   while the rest are `8.3.0~latest`). That's how MongoDB publishes it;
