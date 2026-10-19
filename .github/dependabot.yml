@@ -1,0 +1,54 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /7.0
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /7.0/windows/nanoserver-ltsc2022
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /7.0/windows/windowsservercore-ltsc2022
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /7.0/windows/windowsservercore-ltsc2025
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /8.0
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /8.0/windows/nanoserver-ltsc2022
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /8.0/windows/windowsservercore-ltsc2022
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /8.0/windows/windowsservercore-ltsc2025
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /8.2
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /8.2/windows/nanoserver-ltsc2022
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /8.2/windows/windowsservercore-ltsc2022
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /8.2/windows/windowsservercore-ltsc2025
+    schedule:
+      interval: weekly
