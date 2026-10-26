@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+
+  # Covers the Ubuntu base image. MongoDB apt versions and publication follow
+  # AGENTS.md; the private image and its consumer digest pins stay in that flow.
+  - package-ecosystem: docker
+    directory: /image
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
