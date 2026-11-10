@@ -99,9 +99,9 @@ RUN echo "deb [ signed-by=/etc/apt/keyrings/mongodb.asc ] http://$MONGO_REPO/apt
 	fi
 
 # https://www.mongodb.com/docs/manual/release-notes/9.0/
-ARG MONGO_VERSION=9.0.4
+ARG MONGO_VERSION=9.0.8
 ENV MONGO_VERSION=${MONGO_VERSION}
-# 2026-10-13, mongodb-enterprise 9.0.4 from the 9.0 GA apt channel
+# 2026-11-10, mongodb-enterprise 9.0.8 from the 9.0 GA apt channel
 
 RUN set -x \
 # installing "mongodb-enterprise" pulls in "tzdata" which prompts for input
